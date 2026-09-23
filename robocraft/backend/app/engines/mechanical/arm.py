@@ -417,7 +417,11 @@ def plan_trajectory(design: ArmDesign, waypoints: list[Waypoint], fps: float = 3
         })
         current = q
 
-    samples = [{"t": 0.0, "q": resolved[0]["q_deg"], "gripper": resolved[0]["gripper"]}]
+    def sample(t: float, q: np.ndarray | list[float], gripper: float) -> dict:
+        q = [float(v) for v in q]
+        return {"t": round(t, 4), "q": q, "gripper": gripper, "ee": forward(design, q)["ee"]}
+
+    samples = [sample(0.0, resolved[0]["q_deg"], resolved[0]["gripper"])]
     t0 = 0.0
     for prev, nxt in zip(resolved, resolved[1:], strict=False):
         qa, qb = np.array(prev["q_deg"]), np.array(nxt["q_deg"])
@@ -430,11 +434,8 @@ def plan_trajectory(design: ArmDesign, waypoints: list[Waypoint], fps: float = 3
         for k in range(1, steps + 1):
             tau = k / steps
             s = 10 * tau**3 - 15 * tau**4 + 6 * tau**5
-            samples.append({
-                "t": round(t0 + tau * duration, 4),
-                "q": (qa + (qb - qa) * s).tolist(),
-                "gripper": prev["gripper"] + (nxt["gripper"] - prev["gripper"]) * s,
-            })
+            samples.append(sample(t0 + tau * duration, qa + (qb - qa) * s,
+                                  prev["gripper"] + (nxt["gripper"] - prev["gripper"]) * s))
         nxt["t"] = round(t0 + duration, 4)
         t0 += duration
     resolved[0]["t"] = 0.0

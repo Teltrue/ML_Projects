@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from app.catalog import Catalog, Component
-from app.engines.electrical.netlist import COL_LOAD, COL_POWER, COL_SOURCE, Circuit
+from app.engines.electrical.netlist import COL_DRIVER, COL_LOAD, COL_POWER, COL_SOURCE, Circuit
 from app.engines.electrical.selection import Selection, fuse_rating, select_regulator, to_kgcm
 from app.schemas.design import ArmDesign
 
@@ -63,7 +63,7 @@ def build_arm_circuit(design: ArmDesign, catalog: Catalog, board: Component,
     typical_a, design_a, peak_a = servo_currents(selections)
     rail_v = power.rail_v
 
-    usb = c.add("usb-power", prefix="J", label="USB 5 V", column=COL_SOURCE,
+    usb = c.add("usb-power", prefix="J", label="USB 5 V", column=COL_POWER,
                 reason="Powers the microcontroller logic (never the servos)")
     c.wire(usb, "5V", mcu, "USB", "USB_5V", "power")
 
@@ -111,11 +111,14 @@ def build_arm_circuit(design: ArmDesign, catalog: Catalog, board: Component,
                 fix=f"Turn the trim pot until the output reads {rail_v:.1f} V *before* plugging "
                     "in any servo.", auto_fixed=True)
 
-    cap = c.add("cap-1000uf", prefix="C", label="1000 µF", column=COL_POWER,
-                reason="Smooths servo current spikes that could reset the board",
-                auto_added=True, note="Mind the polarity: stripe = negative")
+    # The bulk capacitor sits on the servo power bus, next to the servos; every servo is fed
+    # from that bus (a terminal block or breadboard rail in practice).
+    cap = c.add("cap-1000uf", prefix="C", label="Servo rail + 1000 µF", column=COL_DRIVER,
+                reason="Servo power bus; the capacitor smooths current spikes that could reset "
+                       "the board", auto_added=True, note="Mind the polarity: stripe = negative")
     c.wire(pos, pos_pin, cap, "+", "V_SERVO", "power")
     c.wire(gnd, gnd_pin, cap, "-", "GND", "ground")
+    pos, pos_pin, gnd, gnd_pin = cap, "+", cap, "-"
 
     for sel in selections:
         servo = c.add(sel.component.id, prefix="M", label=f"{sel.label} servo", column=COL_LOAD,
