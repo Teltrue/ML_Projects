@@ -2,22 +2,28 @@
 
 import { Grid, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { clock } from "@/lib/playback";
 import { useStudio } from "@/lib/store";
 import type { ArmDesign, RoverDesign, TemplateId } from "@/lib/types";
 import ArmModel from "./ArmModel";
 import RoverModel from "./RoverModel";
 
-/** Advances the simulation clock. Other components read it with getState() in useFrame. */
+/** Advances the simulation clock and publishes it to the UI about ten times a second. */
 function PlaybackDriver() {
+  const lastPublish = useRef(0);
   useFrame((_, delta) => {
     const st = useStudio.getState();
     if (!st.playing || !st.sim) return;
-    const t = st.simTime + Math.min(delta, 0.1) * st.speed;
-    if (t >= st.sim.data.duration) useStudio.setState({ simTime: st.sim.data.duration, playing: false });
-    else useStudio.setState({ simTime: t });
+    clock.time = Math.min(clock.time + Math.min(delta, 0.1) * st.speed, st.sim.data.duration);
+    const done = clock.time >= st.sim.data.duration;
+    const now = performance.now();
+    if (done || now - lastPublish.current > 100) {
+      lastPublish.current = now;
+      useStudio.setState(done ? { simTime: clock.time, playing: false } : { simTime: clock.time });
+    }
   });
   return null;
 }

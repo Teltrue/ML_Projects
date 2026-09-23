@@ -36,7 +36,7 @@ TEMPLATE_INFO = {
 
 def _options(source: str, catalog: Catalog) -> list[dict[str, Any]]:
     if source == "microcontroller":
-        return [{"value": c.id, "label": c.name,
+        return [{"value": c.id, "label": c.name, "languages": c.spec("languages"),
                  "note": f"{c.spec('logic_v'):g} V logic · {', '.join(c.spec('languages'))}"}
                 for c in catalog.by_category("microcontroller")]
     template = source.split(":", 1)[1]

@@ -310,7 +310,7 @@
         "drop_v": 2.0,
         "control": "en_in",
         "vih": 2.3,
-        "onboard_5v": {"max_input_v": 12.0, "max_a": 0.5},
+        "onboard_5v": {"min_input_v": 7.0, "max_input_v": 12.0, "max_a": 0.5},
         "pins": ["12V", "GND", "5V", "ENA", "IN1", "IN2", "IN3", "IN4", "ENB", "OUT1", "OUT2", "OUT3", "OUT4"]
       }
     },

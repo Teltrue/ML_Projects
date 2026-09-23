@@ -8,13 +8,16 @@ import type { Language, RoverPreset } from "@/lib/types";
 import { Button, SectionTitle, Segmented } from "../ui";
 import { download } from "./ElectronicsTab";
 
+// Module-level so the selector fallback is referentially stable.
+const ARDUINO_ONLY: Language[] = ["arduino"];
+
 export default function CodeTab() {
   const code = useStudio((s) => s.code);
   const loading = useStudio((s) => s.codeLoading);
   const error = useStudio((s) => s.codeError);
   const language = useStudio((s) => s.language);
   const template = useStudio((s) => s.design?.template);
-  const languages = useStudio((s) => s.analysis?.electrical.board.languages ?? ["arduino"]);
+  const languages = useStudio((s) => s.analysis?.electrical.board.languages) ?? ARDUINO_ONLY;
   const boardName = useStudio((s) => s.analysis?.electrical.board.name);
   const preset = useStudio((s) => s.roverPreset);
   const [copied, setCopied] = useState(false);

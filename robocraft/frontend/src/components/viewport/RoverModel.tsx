@@ -5,7 +5,7 @@ import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { pct } from "@/lib/format";
-import { roverFrame } from "@/lib/playback";
+import { clock, roverFrame } from "@/lib/playback";
 import { useStudio } from "@/lib/store";
 import type { Actuator, RoverDesign } from "@/lib/types";
 
@@ -129,7 +129,7 @@ export default function RoverModel() {
 
   useFrame(() => {
     const st = useStudio.getState();
-    const f = st.sim?.kind === "rover" ? roverFrame(st.sim.data, st.simTime) : null;
+    const f = st.sim?.kind === "rover" ? roverFrame(st.sim.data, clock.time) : null;
     body.current.position.set(f?.x ?? 0, f?.y ?? 0, 0);
     body.current.rotation.z = f?.heading ?? 0;
     body.current.traverse((o) => {

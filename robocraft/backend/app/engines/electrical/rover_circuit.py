@@ -123,17 +123,35 @@ def build_rover_circuit(design: RoverDesign, catalog: Catalog, board: Component,
     c.wire(bat, "-", drv, pins["ground"], "GND", "ground")
 
     onboard = driver.spec("onboard_5v")
-    if onboard and battery.spec("v_max") <= onboard["max_input_v"] and logic_a <= onboard["max_a"]:
+    pack = battery.name.split(" (")[0]
+    logic_ok = True
+    if (onboard and battery.spec("v_max") <= onboard["max_input_v"]
+            and battery.spec("v_nom") >= onboard["min_input_v"] and logic_a <= onboard["max_a"]):
         five, five_pin, five_capacity = drv, "5V", onboard["max_a"]
         five_source = f"{driver.name.split(' ')[0]} onboard regulator"
-        c.check("logic-rail", "pass", "5 V logic from the driver's onboard regulator",
-                f"{battery.name} stays below {onboard['max_input_v']:g} V, so the L298N's "
-                f"regulator can power the board ({logic_a:.2f} A of {onboard['max_a']} A). "
-                "Keep its 5V-EN jumper fitted.")
+        detail = (f"{battery.name} stays below {onboard['max_input_v']:g} V, so the L298N's "
+                  f"regulator can power the board ({logic_a:.2f} A of {onboard['max_a']} A). "
+                  "Keep its 5V-EN jumper fitted.")
+        if battery.spec("v_min") < onboard["min_input_v"]:
+            # The 78M05 needs ~7 V in; a nearly flat pack drops below that.
+            c.check("logic-rail", "info",
+                    f"5 V logic from the L298N regulator - recharge at "
+                    f"≈{onboard['min_input_v']:g} V",
+                    f"{detail} The regulator needs about {onboard['min_input_v']:g} V in, so "
+                    "once the pack runs low the board can brown out and reset.",
+                    fix=f"Recharge when the pack reads ≈{onboard['min_input_v']:g} V.")
+        else:
+            c.check("logic-rail", "pass", "5 V logic from the driver's onboard regulator", detail)
     else:
         reg_c = select_regulator(catalog, battery, LOGIC_RAIL_V, max(logic_a, 0.5))
         if reg_c is None:
+            # Keep a placeholder so the diagram stays complete, but flag that it can't work.
+            logic_ok = False
             reg_c = catalog.get("buck-lm2596")
+            c.check("logic-rail", "error", f"No regulator can make 5 V from a {pack}",
+                    f"The pack delivers {battery.spec('v_min')}-{battery.spec('v_max')} V, but a "
+                    f"buck converter needs about {reg_c.spec('dropout_v'):g} V more than the "
+                    "5 V it outputs.", fix="Pick a 2S or 3S battery.")
         reg = c.add(reg_c.id, prefix="U", label="Buck -> 5 V", column=COL_POWER,
                     reason="Supplies the 5 V logic rail", auto_added=True,
                     note="Adjust output to 5.0 V before connecting the board")
@@ -141,18 +159,23 @@ def build_rover_circuit(design: RoverDesign, catalog: Catalog, board: Component,
         c.wire(bat, "-", reg, "IN-", "GND", "ground")
         five, five_pin, five_capacity = reg, "OUT+", reg_c.spec("continuous_a")
         five_source = reg_c.name
-        if onboard and battery.spec("v_max") > onboard["max_input_v"]:
-            detail = (f"A full {battery.name.split(' (')[0]} reaches {battery.spec('v_max')} V - "
-                      f"above the {onboard['max_input_v']:g} V limit of the L298N's onboard "
-                      "regulator, which would overheat. RoboCraft added a buck converter for the "
-                      "logic rail instead.")
-            fix = "Remove the L298N's 5V-EN jumper and set the buck output to 5.0 V."
-        else:
-            detail = (f"The {driver.name} has no 5 V output, so a buck converter supplies the "
-                      "board and sensor.")
-            fix = "Set the buck output to 5.0 V before connecting the board."
-        c.check("logic-rail", "info", "Added a 5 V buck converter for the logic", detail,
-                fix=fix, auto_fixed=True)
+        if logic_ok:
+            if onboard and battery.spec("v_max") > onboard["max_input_v"]:
+                detail = (f"A full {pack} reaches {battery.spec('v_max')} V - above the "
+                          f"{onboard['max_input_v']:g} V limit of the L298N's onboard regulator, "
+                          "which would overheat. RoboCraft added a buck converter for the logic "
+                          "rail instead.")
+                fix = "Remove the L298N's 5V-EN jumper and set the buck output to 5.0 V."
+            elif onboard:
+                detail = (f"A {pack} is below the ≈{onboard['min_input_v']:g} V the L298N's "
+                          "onboard regulator needs, so a buck converter supplies the logic.")
+                fix = "Remove the L298N's 5V-EN jumper and set the buck output to 5.0 V."
+            else:
+                detail = (f"The {driver.name} has no 5 V output, so a buck converter supplies "
+                          "the board and sensor.")
+                fix = "Set the buck output to 5.0 V before connecting the board."
+            c.check("logic-rail", "info", "Added a 5 V buck converter for the logic", detail,
+                    fix=fix, auto_fixed=True)
     c.wire(five, five_pin, mcu, board.spec("power_pin"), "5V", "power")
     c.wire(drv, pins["ground"] if control != "pwm_dir" else "GND", mcu, "GND", "GND", "ground")
 
@@ -310,7 +333,7 @@ def build_rover_circuit(design: RoverDesign, catalog: Catalog, board: Component,
          "status": "ok" if per_channel_run <= driver.spec("continuous_a") else "error"},
         {"name": "Logic 5 V", "voltage": LOGIC_RAIL_V, "source": five_source,
          "typical_a": logic_a, "peak_a": logic_a, "capacity_a": five_capacity,
-         "status": "ok" if logic_a <= five_capacity else "error"},
+         "status": "ok" if logic_ok and logic_a <= five_capacity else "error"},
     ]
     result = c.to_dict()
     result.update({"power_source_id": battery.id, "driver_id": driver.id,

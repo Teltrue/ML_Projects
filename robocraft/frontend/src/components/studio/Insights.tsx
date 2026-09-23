@@ -19,7 +19,9 @@ export default function Insights() {
   const tab = useStudio((s) => s.tab);
   const analysis = useStudio((s) => s.analysis);
   const analyzing = useStudio((s) => s.analyzing);
-  const error = useStudio((s) => s.analysisError);
+  const analysisError = useStudio((s) => s.analysisError);
+  const actionError = useStudio((s) => s.actionError);
+  const error = analysisError ?? actionError;
   const counts = analysis?.summary.check_counts;
 
   return (
@@ -70,7 +72,7 @@ export default function Insights() {
             <span>{error}</span>
           </div>
         )}
-        {!analysis && !error ? (
+        {!analysis && !analysisError ? (
           <div className="flex h-40 items-center justify-center gap-2 text-sm text-ink-400">
             <LoaderCircle className="size-4 animate-spin" /> Running the engines…
           </div>

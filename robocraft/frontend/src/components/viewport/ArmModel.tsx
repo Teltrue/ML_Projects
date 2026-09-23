@@ -5,7 +5,7 @@ import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { pct } from "@/lib/format";
-import { armFrame, DEG } from "@/lib/playback";
+import { armFrame, clock, DEG } from "@/lib/playback";
 import { useStudio } from "@/lib/store";
 import type { Actuator, ArmDesign, Vec3 } from "@/lib/types";
 
@@ -279,11 +279,11 @@ export default function ArmModel() {
     let carry: Vec3 | null = null;
     let carried = false;
     if (st.sim?.kind === "arm") {
-      const f = armFrame(st.sim.data, st.simTime);
+      const f = armFrame(st.sim.data, clock.time);
       q = f.q;
       g = f.gripper;
       if (events) {
-        if (st.simTime <= events.pickT || (g <= 0.5 && st.simTime < events.placeT)) {
+        if (clock.time <= events.pickT || (g <= 0.5 && clock.time < events.placeT)) {
           carry = events.pick;
         } else if (g > 0.5) {
           carry = f.ee;

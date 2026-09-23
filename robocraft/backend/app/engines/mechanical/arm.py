@@ -26,6 +26,7 @@ from app.engines.mechanical.kinematics import (
     center_of_mass,
     fk,
     forward_kinematics,
+    gravity_torques,
     rod_unit_inertia,
     unit_gravity_torque,
     unit_inertia_diagonal,
@@ -324,10 +325,7 @@ def max_payload(design: ArmDesign, act: ActuatorMasses, available_nm: list[float
 
 def holding_torques(design: ArmDesign, act: ActuatorMasses, q_deg: list[float]) -> list[float]:
     frames = forward_kinematics(dh_links(design), np.radians(q_deg)[None, :])
-    tau = np.zeros(3)
-    for body in moving_bodies(design, act):
-        tau += body.mass * unit_gravity_torque(frames, body)[0]
-    return [float(abs(t)) for t in tau]
+    return [float(abs(t)) for t in gravity_torques(frames, moving_bodies(design, act))[0]]
 
 
 def stability(design: ArmDesign, act: ActuatorMasses, q_deg: list[float]) -> dict:

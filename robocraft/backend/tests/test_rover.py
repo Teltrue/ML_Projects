@@ -47,6 +47,20 @@ def test_preset_paths_close_on_themselves(preset):
     assert abs(end["v"]) < 1e-9
 
 
+@pytest.mark.parametrize("speed,accel", [(1.0, 0.5), (2.0, 0.5), (3.0, 0.1)])
+def test_fast_rovers_still_drive_the_planned_shapes(speed, accel):
+    design = DESIGN.model_copy(update={"max_speed": speed, "max_accel": accel})
+    result = rover.simulate(design, rover.preset_program(design, "square"))
+    side = np.clip(6 * design.chassis_length, 0.6, 2.5)
+    assert result["bounds"]["max_x"] == pytest.approx(side, abs=1e-6)
+    assert result["bounds"]["max_y"] == pytest.approx(side, abs=1e-6)
+    end = result["samples"][-1]
+    assert (end["x"], end["y"]) == pytest.approx((0.0, 0.0), abs=1e-6)
+    assert end["heading"] == pytest.approx(2 * np.pi, abs=1e-6)
+    for step in rover.preset_program(design, "figure8"):
+        assert step.duration >= max(abs(step.left), abs(step.right)) / accel - 1e-9
+
+
 def test_square_has_expected_size_and_acceleration_limit():
     result = rover.simulate(DESIGN, rover.preset_program(DESIGN, "square"))
     side = np.clip(6 * DESIGN.chassis_length, 0.6, 2.5)

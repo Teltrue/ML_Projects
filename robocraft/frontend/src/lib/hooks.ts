@@ -87,9 +87,9 @@ export function useArmPose() {
           current: st.pose?.q_deg,
           actuator_masses_kg: JSON.parse(args.masses),
         });
-        useStudio.setState({ pose });
+        useStudio.setState({ pose, actionError: null });
       } catch (err) {
-        useStudio.setState({ analysisError: (err as Error).message });
+        useStudio.setState({ actionError: (err as Error).message });
       }
     },
   );

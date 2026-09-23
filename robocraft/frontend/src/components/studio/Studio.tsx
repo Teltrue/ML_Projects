@@ -42,6 +42,9 @@ export default function Studio({ template, projectId }: { template: TemplateId; 
   const desktop = useMediaQuery("(min-width: 1024px)");
 
   useEffect(() => {
+    const st = useStudio.getState();
+    // Saving a new project adds ?project=<id> to the URL; the studio already holds it.
+    if (projectId && st.projectId === projectId && st.spec?.id === template && st.design) return;
     let cancelled = false;
     (async () => {
       try {

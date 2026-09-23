@@ -24,13 +24,14 @@ export default function TopBar() {
 
   const save = async () => {
     if (!design) return;
+    const sent = design;
     setSaving(true);
     setSaveError(null);
     try {
       const project = projectId
-        ? await api.updateProject(projectId, design.name, design)
-        : await api.createProject(design.name, design);
-      markSaved(project.id);
+        ? await api.updateProject(projectId, sent.name, sent)
+        : await api.createProject(sent.name, sent);
+      markSaved(project.id, sent);
       if (!projectId) router.replace(`/studio/${design.template}?project=${project.id}`, { scroll: false });
     } catch (err) {
       setSaveError((err as Error).message);

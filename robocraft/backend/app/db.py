@@ -4,7 +4,6 @@ PostgreSQL is the production target (see docker-compose.yml); SQLite is used for
 development and tests. JSON columns use JSONB on PostgreSQL.
 """
 
-from collections.abc import Iterator
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -60,8 +59,3 @@ def make_engine(url: str) -> Engine:
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, expire_on_commit=False)
-
-
-def session_scope(factory: sessionmaker[Session]) -> Iterator[Session]:
-    with factory() as session:
-        yield session

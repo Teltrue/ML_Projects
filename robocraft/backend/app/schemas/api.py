@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.design import ArmDesign, Design, RoverDesign
 
@@ -184,21 +184,27 @@ class ArmPoseOut(BaseModel):
 
 
 class WaypointIn(BaseModel):
-    label: str = ""
+    label: str = Field("", max_length=40)
     gripper: float = Field(0.0, ge=0.0, le=1.0)
     position: Vec3 | None = None
     joints: Vec3 | None = None
+
+    @model_validator(mode="after")
+    def _one_target(self) -> "WaypointIn":
+        if (self.position is None) == (self.joints is None):
+            raise ValueError("Give each waypoint either a position or joint angles")
+        return self
 
 
 class ArmTrajectoryRequest(BaseModel):
     design: ArmDesign
     waypoints: list[WaypointIn] | None = Field(
-        None, description="Omit to get the pick-and-place demo for this arm."
+        None, max_length=50, description="Omit to get the pick-and-place demo for this arm."
     )
 
 
 class RoverStepIn(BaseModel):
-    label: str = ""
+    label: str = Field("", max_length=40)
     left: float = Field(..., ge=-5, le=5, description="Left wheel speed, m/s")
     right: float = Field(..., ge=-5, le=5, description="Right wheel speed, m/s")
     duration: float = Field(..., gt=0, le=120, description="Seconds")
@@ -207,7 +213,15 @@ class RoverStepIn(BaseModel):
 class RoverSimRequest(BaseModel):
     design: RoverDesign
     preset: Literal["square", "figure8", "spin"] = "square"
-    steps: list[RoverStepIn] | None = Field(None, description="Overrides the preset")
+    steps: list[RoverStepIn] | None = Field(
+        None, max_length=60, description="Overrides the preset (at most 10 minutes in total)"
+    )
+
+    @model_validator(mode="after")
+    def _bounded(self) -> "RoverSimRequest":
+        if self.steps and sum(s.duration for s in self.steps) > 600:
+            raise ValueError("A simulation can last at most 600 s")
+        return self
 
 
 # --------------------------------------------------------------------------- catalog & projects

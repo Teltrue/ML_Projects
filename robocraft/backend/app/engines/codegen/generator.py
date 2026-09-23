@@ -48,6 +48,13 @@ _env = Environment(
 _env.filters["f"] = lambda value, digits=3: f"{float(value):.{digits}f}"
 
 
+def _comment_safe(name: str) -> str:
+    """The design name goes into a C block comment and a Python docstring, so keep only
+    characters that can't end either (no quotes, slashes, stars, backslashes or newlines)."""
+    cleaned = re.sub(r"[^A-Za-z0-9 _.,()&+#-]", "", name)
+    return re.sub(r"\s+", " ", cleaned).strip() or "RoboCraft robot"
+
+
 def _slug(name: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_").lower()
     return slug or "robocraft_robot"
@@ -131,7 +138,7 @@ def generate(design: ArmDesign | RoverDesign, catalog: Catalog, language: str,
     analysis = analyze(design, catalog)
     core = board.spec("arduino_core")
     context = {
-        "name": design.name,
+        "name": _comment_safe(design.name),
         "board_name": board.name,
         "board_id": board.id,
         "core": core,

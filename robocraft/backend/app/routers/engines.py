@@ -2,6 +2,7 @@
 
 from typing import Annotated
 
+import numpy as np
 from fastapi import APIRouter, Depends
 
 from app.catalog import Catalog
@@ -41,10 +42,12 @@ def arm_pose(req: ArmPoseRequest) -> dict:
     """Forward or inverse kinematics for one pose, with holding torques and stability."""
     design = req.design
     if req.mode == "fk":
-        q = list(req.joints or arm.HOME_DEG)
-        q = [float(v) for v in arm.clamp_to_limits(q)]
-        reachable = within = True
-        message = "Joint angles set."
+        requested = np.array(req.joints or arm.HOME_DEG, dtype=float)
+        q = [float(v) for v in arm.clamp_to_limits(requested)]
+        reachable = True
+        within = arm.within_limits(requested)
+        message = ("Joint angles set." if within
+                   else "Some joint angles were outside the servo range and were clamped.")
     else:
         target = req.target or arm.forward(design, arm.HOME_DEG)["ee"]
         sol = arm.inverse(design, target, req.current)

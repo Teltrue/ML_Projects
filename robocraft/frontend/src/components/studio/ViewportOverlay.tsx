@@ -3,6 +3,7 @@
 import { Eye, LoaderCircle, Pause, Play, Ruler, RotateCcw, Scan, X } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { clock } from "@/lib/playback";
 import { useStudio } from "@/lib/store";
 import type { RoverPreset } from "@/lib/types";
 import { Button, Segmented, cx } from "../ui";
@@ -16,20 +17,23 @@ const PRESETS: { value: RoverPreset; label: string }[] = [
 async function runSimulation(preset?: RoverPreset) {
   const st = useStudio.getState();
   if (!st.design) return;
-  useStudio.setState({ simLoading: true });
+  // Only the latest request may land: a newer click or any design edit bumps the token.
+  const request = st.simRequest + 1;
+  useStudio.setState({ simLoading: true, simRequest: request });
+  const current = () => useStudio.getState().simRequest === request;
   try {
-    if (st.design.template === "arm") {
-      st.setSim({ kind: "arm", data: await api.armTrajectory(st.design) });
-    } else {
-      st.setSim({
-        kind: "rover",
-        data: await api.roverSimulate(st.design, preset ?? st.roverPreset),
-      });
+    const sim =
+      st.design.template === "arm"
+        ? ({ kind: "arm", data: await api.armTrajectory(st.design) } as const)
+        : ({ kind: "rover", data: await api.roverSimulate(st.design, preset ?? st.roverPreset) } as const);
+    if (current()) {
+      useStudio.getState().setSim(sim);
+      useStudio.setState({ actionError: null });
     }
   } catch (err) {
-    useStudio.setState({ analysisError: (err as Error).message });
+    if (current()) useStudio.setState({ actionError: (err as Error).message });
   } finally {
-    useStudio.setState({ simLoading: false });
+    if (current()) useStudio.setState({ simLoading: false });
   }
 }
 
@@ -76,7 +80,10 @@ export function PlaybackBar() {
 
   const togglePlay = () => {
     if (playing) useStudio.setState({ playing: false });
-    else useStudio.setState({ playing: true, simTime: simTime >= duration ? 0 : simTime });
+    else {
+      if (clock.time >= duration) clock.time = 0;
+      useStudio.setState({ playing: true, simTime: clock.time });
+    }
   };
 
   return (
@@ -111,7 +118,10 @@ export function PlaybackBar() {
             step={0.01}
             value={simTime}
             style={{ "--fill": `${(simTime / duration) * 100}%` } as React.CSSProperties}
-            onChange={(e) => useStudio.setState({ simTime: Number(e.target.value), playing: false })}
+            onChange={(e) => {
+              clock.time = Number(e.target.value);
+              useStudio.setState({ simTime: clock.time, playing: false });
+            }}
           />
           <span className="w-20 text-right text-[11px] text-ink-300 tabular-nums">
             {simTime.toFixed(1)} / {duration.toFixed(1)} s

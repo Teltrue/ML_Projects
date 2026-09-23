@@ -12,6 +12,7 @@ import type {
   TemplateSpec,
   Vec3,
 } from "./types";
+import { clock } from "./playback";
 
 export type InsightTab = "overview" | "mechanics" | "electronics" | "code";
 
@@ -26,6 +27,8 @@ interface StudioState {
   analysis: Analysis | null;
   analyzing: boolean;
   analysisError: string | null;
+  /** Failure of the last pose or simulation request; cleared by the next success. */
+  actionError: string | null;
 
   // Arm posing (the IK target can be dragged in the viewport)
   poseMode: "ik" | "fk";
@@ -38,7 +41,10 @@ interface StudioState {
   // Motion playback
   sim: Simulation | null;
   simLoading: boolean;
+  /** Bumped whenever a pending simulation request becomes stale. */
+  simRequest: number;
   playing: boolean;
+  /** Playback time for the UI, published at ~10 Hz; the 3D scene reads `clock` directly. */
   simTime: number;
   speed: number;
   roverPreset: RoverPreset;
@@ -57,7 +63,7 @@ interface StudioState {
   init: (spec: TemplateSpec, design: Design, projectId: string | null) => void;
   setParam: (key: string, value: unknown) => void;
   setName: (name: string) => void;
-  markSaved: (projectId: string) => void;
+  markSaved: (projectId: string, saved: Design) => void;
   set: (partial: Partial<StudioState>) => void;
   setTarget: (target: Vec3) => void;
   setJoints: (joints: Vec3) => void;
@@ -79,6 +85,7 @@ export const useStudio = create<StudioState>((set, get) => ({
   analysis: null,
   analyzing: false,
   analysisError: null,
+  actionError: null,
   poseMode: "ik",
   target: [0.12, 0, 0.22],
   joints: [0, 90, -90],
@@ -87,6 +94,7 @@ export const useStudio = create<StudioState>((set, get) => ({
   dragging: false,
   sim: null,
   simLoading: false,
+  simRequest: 0,
   playing: false,
   simTime: 0,
   speed: 1,
@@ -101,16 +109,20 @@ export const useStudio = create<StudioState>((set, get) => ({
   showReach: true,
   viewKey: 0,
 
-  init: (spec, design, projectId) =>
-    set({
+  init: (spec, design, projectId) => {
+    clock.time = 0;
+    set((s) => ({
       spec,
       design,
       projectId,
       savedSnapshot: projectId ? snapshot(design) : null,
       analysis: null,
       analysisError: null,
+      actionError: null,
       pose: null,
       sim: null,
+      simLoading: false,
+      simRequest: s.simRequest + 1,
       playing: false,
       simTime: 0,
       code: null,
@@ -121,21 +133,29 @@ export const useStudio = create<StudioState>((set, get) => ({
       joints: [0, 90, -90],
       gripperClosed: false,
       language: "arduino",
-      viewKey: get().viewKey + 1,
-    }),
+      viewKey: s.viewKey + 1,
+    }));
+  },
 
   setParam: (key, value) => {
-    const { design, sim } = get();
+    const { design, spec } = get();
     if (!design) return;
     const next = { ...design, [key]: value } as Design;
-    // Motion previews are stale once the geometry or limits change.
-    set({ design: next, ...(sim ? { sim: null, playing: false, simTime: 0 } : {}) });
+    // Motion previews - shown or still loading - are stale once the design changes.
+    clock.time = 0;
+    set((s) => ({
+      design: next,
+      sim: null,
+      playing: false,
+      simTime: 0,
+      simLoading: false,
+      simRequest: s.simRequest + 1,
+    }));
     if (next.board !== design.board) {
-      const spec = get().spec;
       const board = spec?.parameters
         .find((p) => p.key === "board")
         ?.options.find((o) => o.value === next.board);
-      if (board && !String(board.note ?? "").includes("micropython")) set({ language: "arduino" });
+      if (board?.languages && !board.languages.includes(get().language)) set({ language: "arduino" });
     }
   },
 
@@ -144,10 +164,8 @@ export const useStudio = create<StudioState>((set, get) => ({
     if (design) set({ design: { ...design, name } });
   },
 
-  markSaved: (projectId) => {
-    const { design } = get();
-    if (design) set({ projectId, savedSnapshot: snapshot(design) });
-  },
+  // Snapshot what was actually sent: edits made while the request was in flight stay dirty.
+  markSaved: (projectId, saved) => set({ projectId, savedSnapshot: snapshot(saved) }),
 
   set: (partial) => set(partial),
 
@@ -162,19 +180,30 @@ export const useStudio = create<StudioState>((set, get) => ({
     else set({ poseMode: mode });
   },
 
-  setSim: (sim) =>
+  setSim: (sim) => {
+    clock.time = 0;
     set((s) => ({
       sim,
       simTime: 0,
       playing: sim !== null,
       // Re-frame the camera around a rover's path (and back when leaving the simulation).
       viewKey: sim?.kind === "rover" || s.sim?.kind === "rover" ? s.viewKey + 1 : s.viewKey,
-    })),
+    }));
+  },
 
   focusActuator: (role) => set({ tab: "electronics", focusRole: role }),
 
   resetView: () => set((s) => ({ viewKey: s.viewKey + 1 })),
 }));
 
-export const isDirty = (s: Pick<StudioState, "design" | "savedSnapshot">) =>
-  !!s.design && s.savedSnapshot !== snapshot(s.design);
+// Selectors run on every store update, so serialise each design object only once.
+const snapshots = new WeakMap<Design, string>();
+export const isDirty = (s: Pick<StudioState, "design" | "savedSnapshot">) => {
+  if (!s.design) return false;
+  let snap = snapshots.get(s.design);
+  if (snap === undefined) {
+    snap = snapshot(s.design);
+    snapshots.set(s.design, snap);
+  }
+  return s.savedSnapshot !== snap;
+};

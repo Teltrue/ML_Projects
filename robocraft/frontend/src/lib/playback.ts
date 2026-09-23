@@ -1,5 +1,11 @@
 import type { ArmTrajectory, RoverSample, RoverSim, Vec3 } from "./types";
 
+/**
+ * The simulation clock. The render loop advances it every frame and the 3D models read it
+ * directly, so playback doesn't push 60 store updates a second through React.
+ */
+export const clock = { time: 0 };
+
 /** Index of the last sample with t <= time (samples are sorted by t). */
 function bracket<T extends { t: number }>(samples: T[], time: number): [T, T, number] {
   if (time <= samples[0].t) return [samples[0], samples[0], 0];

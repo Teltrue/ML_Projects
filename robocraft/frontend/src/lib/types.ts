@@ -10,6 +10,8 @@ export interface ParamOption {
   value: string | number;
   label: string;
   note?: string;
+  /** Firmware languages, for microcontroller options. */
+  languages?: Language[];
 }
 
 export interface ParameterSpec {

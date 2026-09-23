@@ -92,7 +92,10 @@ def test_default_rover_uses_l298n_with_onboard_regulator(catalog):
     elec = result["electrical"]
     assert elec["driver_id"] == "l298n"
     checks = checks_by_id(result)
-    assert checks["logic-rail"]["severity"] == "pass"
+    # The 2S pack sags below the ~7 V the L298N's regulator needs when nearly empty.
+    assert checks["logic-rail"]["severity"] == "info"
+    assert "recharge" in checks["logic-rail"]["title"]
+    assert not any(p["category"] == "regulator" for p in elec["parts"])
     assert checks["logic-level-echo"]["severity"] == "pass"  # 5 V Uno reads 5 V ECHO directly
     assert set(elec["pin_map"]) == {"ena", "enb", "in1", "in2", "in3", "in4", "trig", "echo"}
     # PWM-capable pins for the enables
@@ -121,6 +124,14 @@ def test_3s_lipo_bypasses_l298n_regulator(catalog):
     check = checks_by_id(result)["logic-rail"]
     assert check["auto_fixed"] and "12.6" in check["detail"]
     assert any(p["category"] == "regulator" for p in result["electrical"]["parts"])
+
+
+def test_logic_rail_that_cannot_be_regulated_is_an_error(catalog):
+    design = RoverDesign(power_source="batt-4xaa-nimh", motor_driver="tb6612fng")
+    result = analyze(design, catalog)
+    assert checks_by_id(result)["logic-rail"]["severity"] == "error"
+    rail = next(r for r in result["electrical"]["rails"] if r["name"] == "Logic 5 V")
+    assert rail["status"] == "error"
 
 
 def test_4wd_doubles_channel_current(catalog):

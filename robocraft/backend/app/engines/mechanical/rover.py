@@ -100,6 +100,20 @@ PRESETS = {
 }
 
 
+def _move(design: RoverDesign, label: str, left: float, right: float,
+          duration: float) -> DriveStep:
+    """A move that reaches its commanded speed before it ends.
+
+    Rest-to-rest distance is ``speed x duration`` only if the wheels finish ramping up
+    (``speed / max_accel``) within the step. Short, fast moves are slowed down by ``s`` and
+    stretched by ``1/s`` instead, which keeps every wheel's distance - and so the path -
+    unchanged.
+    """
+    ramp = max(abs(left), abs(right)) / design.max_accel
+    s = min(1.0, float(np.sqrt(duration / ramp))) if ramp > 0 else 1.0
+    return DriveStep(label, left * s, right * s, duration / s)
+
+
 def preset_program(design: RoverDesign, preset: str) -> list[DriveStep]:
     """Rest-to-rest manoeuvres. A stop step after every move lets each wheel ramp down, which
     makes the travelled distance exactly ``speed x duration`` (the ramps cancel out)."""
@@ -111,20 +125,20 @@ def preset_program(design: RoverDesign, preset: str) -> list[DriveStep]:
 
     if preset == "square":
         side = float(np.clip(6 * design.chassis_length, 0.6, 2.5))
-        turn_time = (np.pi / 2) * (w / 2) / v_turn
+        turn_time = float((np.pi / 2) * (w / 2) / v_turn)
         for i in range(4):
-            steps += [DriveStep(f"side {i + 1}", v, v, side / v), stop,
-                      DriveStep(f"turn {i + 1}", -v_turn, v_turn, float(turn_time)), stop]
+            steps += [_move(design, f"side {i + 1}", v, v, side / v), stop,
+                      _move(design, f"turn {i + 1}", -v_turn, v_turn, turn_time), stop]
     elif preset == "figure8":
         radius = max(2.0 * w, 0.35)
         k = w / (2 * radius)
-        lap = 2 * np.pi * radius / v
-        steps += [DriveStep("left loop", v * (1 - k), v * (1 + k), float(lap)), stop,
-                  DriveStep("right loop", v * (1 + k), v * (1 - k), float(lap)), stop]
+        lap = float(2 * np.pi * radius / v)
+        steps += [_move(design, "left loop", v * (1 - k), v * (1 + k), lap), stop,
+                  _move(design, "right loop", v * (1 + k), v * (1 - k), lap), stop]
     elif preset == "spin":
-        spin_time = 2 * np.pi * (w / 2) / v_turn
-        steps += [DriveStep("spin left", -v_turn, v_turn, float(spin_time)), stop,
-                  DriveStep("spin right", v_turn, -v_turn, float(spin_time)), stop]
+        spin_time = float(2 * np.pi * (w / 2) / v_turn)
+        steps += [_move(design, "spin left", -v_turn, v_turn, spin_time), stop,
+                  _move(design, "spin right", v_turn, -v_turn, spin_time), stop]
     else:
         raise ValueError(f"Unknown preset '{preset}'")
     return steps

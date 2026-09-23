@@ -107,13 +107,6 @@ export function Stat({
   );
 }
 
-export const severityTone = {
-  pass: "ok",
-  info: "info",
-  warning: "warn",
-  error: "error",
-} as const;
-
 export function SeverityIcon({ severity, className }: { severity: Severity; className?: string }) {
   const cls = cx("size-4 shrink-0", className);
   if (severity === "pass") return <CircleCheck className={cx(cls, "text-emerald-400")} />;
