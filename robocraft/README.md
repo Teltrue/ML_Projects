@@ -100,7 +100,7 @@ robocraft/
 │   │   ├── routers/          catalog.py, engines.py, projects.py
 │   │   ├── pipeline.py       engine orchestration
 │   │   └── main.py           app factory
-│   └── tests/                108 tests, including compiling/running the generated firmware
+│   └── tests/                120 tests, including compiling/running the generated firmware
 ├── frontend/src/
 │   ├── app/                  landing page, /studio/[template]
 │   ├── components/studio/    parameter & pose panels, insights tabs, wiring diagram, code viewer
