@@ -1,5 +1,10 @@
-"""RoboCraft API entry point: ``uvicorn app.main:app --reload``."""
+"""RoboCraft API entry point: ``uvicorn app.main:app --reload``.
 
+Vercel auto-detects this module (``app/main.py``) and serves ``app`` as a FastAPI function.
+"""
+
+import logging
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -7,28 +12,26 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.catalog import load_catalog, seed_components
 from app.config import settings
-from app.db import Base, make_engine, make_session_factory
 from app.engines.codegen.generator import CodegenError
 from app.pipeline import DesignError
 from app.routers import catalog, engines, projects
+from app.startup import ensure_ready
+
+log = logging.getLogger("robocraft")
 
 
 def create_app(database_url: str | None = None) -> FastAPI:
-    url = database_url or settings.database_url
-
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        engine = make_engine(url)
-        Base.metadata.create_all(engine)
-        factory = make_session_factory(engine)
-        with factory() as session:
-            seed_components(session)
-            app.state.catalog = load_catalog(session)
-        app.state.session_factory = factory
+        try:
+            ensure_ready(app)
+        except Exception:
+            log.exception("Start-up failed; will retry on the first request")
         yield
-        engine.dispose()
+        engine = getattr(app.state, "engine", None)
+        if engine is not None:
+            engine.dispose()
 
     app = FastAPI(
         title="RoboCraft API",
@@ -36,6 +39,9 @@ def create_app(database_url: str | None = None) -> FastAPI:
         description="Mechanical, electrical and code-generation engines for beginner robotics.",
         lifespan=lifespan,
     )
+    app.state.database_url = database_url or settings.database_url
+    app.state.init_lock = threading.Lock()
+    app.state.session_factory = None
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
