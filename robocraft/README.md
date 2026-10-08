@@ -58,6 +58,48 @@ The web app proxies `/api/*` to the backend (`BACKEND_URL`, default
 `postgresql+psycopg://user:pass@host/db`) to use PostgreSQL instead of the default
 `sqlite:///./robocraft.db`.
 
+### Option C: host it on Vercel (to share with a team)
+
+The app runs as **two Vercel projects from this one repository**: the API (FastAPI,
+`robocraft/backend`) and the web app (Next.js, `robocraft/frontend`). The API also needs a
+**Postgres database** so saved projects persist; the free Neon plan from Vercel's
+marketplace is enough.
+
+1. **Put the code on the production branch.** Vercel builds production from the repo's
+   default branch (`main`). Merge this branch into it, or change the production branch
+   under *Settings → Git*.
+2. **Deploy the API.**
+   - On vercel.com, choose *Add New → Project*, import this GitHub repository, and set
+     **Root Directory** to `robocraft/backend`.
+   - The framework preset should detect **FastAPI** (pick it if it doesn't), then deploy.
+   - Open the project's **Storage** tab, choose *Create Database → Neon (Postgres)*, and
+     connect it to the project. This sets `DATABASE_URL`.
+   - Redeploy (*Deployments → ⋯ → Redeploy*).
+   - Check `https://<api-project>.vercel.app/api/health`. It should return `{"status":"ok"}`.
+3. **Deploy the web app.**
+   - Import the **same repository again** as a second project, with **Root Directory** set
+     to `robocraft/frontend`.
+   - Under *Environment Variables*, add `BACKEND_URL` set to the API's production URL from
+     step 2, for example `https://robocraft-api.vercel.app`. The build stops with an
+     explanation if this is missing.
+   - Deploy.
+4. **Share the web app's production URL** (`https://<web-project>.vercel.app`) with your
+   teammates. They don't need Vercel accounts.
+
+Notes:
+
+- **Who can open which URLs.** Vercel protects *preview* deployments (every non-production
+  branch and commit URL) so that only members of your Vercel team can open them.
+  Production URLs are public. Point `BACKEND_URL` at the API's production domain, not a
+  preview URL.
+- **Without a database** the API still works. It falls back to a throw-away SQLite file in
+  `/tmp`, so every engine runs, but saved projects disappear whenever an instance restarts.
+- **Faster builds (optional).** Under *Settings → Git* in each project, enable skipping
+  deployments when nothing changed in that project's root directory. Each half then only
+  rebuilds when its own folder changes.
+- **Upload size.** The API bundle is about 130 MB (mostly NumPy), within Vercel's 225 MB
+  function limit.
+
 ## Architecture
 
 ```mermaid
@@ -99,8 +141,9 @@ robocraft/
 │   │   ├── schemas/          design.py (parameters + UI metadata), api.py
 │   │   ├── routers/          catalog.py, engines.py, projects.py
 │   │   ├── pipeline.py       engine orchestration
-│   │   └── main.py           app factory
-│   └── tests/                120 tests, including compiling/running the generated firmware
+│   │   ├── startup.py        lazy, retrying DB/catalog initialisation (serverless-safe)
+│   │   └── main.py           app factory (Vercel auto-detects app/main.py)
+│   └── tests/                129 tests, including compiling/running the generated firmware
 ├── frontend/src/
 │   ├── app/                  landing page, /studio/[template]
 │   ├── components/studio/    parameter & pose panels, insights tabs, wiring diagram, code viewer

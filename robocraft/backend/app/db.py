@@ -11,6 +11,7 @@ from sqlalchemy import JSON, DateTime, Float, String, Text, create_engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy.pool import NullPool
 
 JsonType = JSON().with_variant(JSONB(), "postgresql")
 
@@ -52,9 +53,12 @@ class ProjectRow(Base):
     )
 
 
-def make_engine(url: str) -> Engine:
+def make_engine(url: str, serverless: bool = False) -> Engine:
     connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    return create_engine(url, pool_pre_ping=True, connect_args=connect_args)
+    # Serverless instances are frozen between requests, so pooled connections go stale:
+    # open one per request instead (point DATABASE_URL at the provider's pooler).
+    pooling = {"poolclass": NullPool} if serverless else {"pool_pre_ping": True}
+    return create_engine(url, connect_args=connect_args, **pooling)
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:

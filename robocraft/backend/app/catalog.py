@@ -72,12 +72,26 @@ def default_catalog() -> Catalog:
 
 
 def seed_components(session: Session) -> int:
-    """Insert or update every component from the seed file. Returns the number written."""
-    items = _read_seed()
-    for item in items:
-        session.merge(ComponentRow(**item))
-    session.commit()
-    return len(items)
+    """Insert or update components from the seed file. Returns the number written.
+
+    Reads the table once and only writes what changed, so the usual cold start costs a
+    single query.
+    """
+    existing = {row.id: row for row in session.scalars(select(ComponentRow))}
+    written = 0
+    for item in _read_seed():
+        row = existing.get(item["id"])
+        if row is None:
+            session.add(ComponentRow(**item))
+        elif any(getattr(row, key) != value for key, value in item.items()):
+            for key, value in item.items():
+                setattr(row, key, value)
+        else:
+            continue
+        written += 1
+    if written:
+        session.commit()
+    return written
 
 
 def load_catalog(session: Session) -> Catalog:
